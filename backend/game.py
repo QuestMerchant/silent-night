@@ -1,11 +1,10 @@
 import random
 import uuid
-import string
 from abc import ABC, abstractmethod
 
 class Lobby:
     def __init__(self, host, game_code=None):
-        self.code = game_code or self._generate_code()
+        self.code = game_code
         self.host_id = host.id
         host.is_host = True
         self.users = {host.id: host}
@@ -16,9 +15,6 @@ class Lobby:
         self.game_state = 'lobby' # lobby, night, voting/day
         self.eliminated = []
         self.remaining_players = len(self.users) - len(self.eliminated)
-
-    def _generate_code(self):
-        return ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase + string.digits, k=4))
     
     def add_user(self, user):
         if self.game_state != 'lobby':
@@ -68,6 +64,17 @@ class Lobby:
         for i in range(self.settings['Serial Killers'] + self.settings['Spies'], len(user_ids)):
             self.users[user_ids[i]].role = Civilian()
 
+    def to_dict(self):
+        """Convert Lobby to a dict for storing in memory"""
+        return {
+            'code': self.code,
+            'host_id': self.host_id,
+            'settings': self.settings,
+            'game_state': self.game_state,
+            'users': { uid: user.to_dict() for uid, user in self.users.items()},
+            'remaining_players': self.remaining_players
+        }
+
 # user.role = roleClass() to assign or user.assign_role(roleClass())
 class User:
     def __init__(self, username, user_id=None):
@@ -89,10 +96,11 @@ class User:
 
     def to_dict(self):
         return {
-            'id': self.id,
+            #'id': self.id,
             'username': self.username,
             'alive': self.alive,
-            'host': self.host
+            'host': self.is_host,
+            'role': self.role
         }
     
 
