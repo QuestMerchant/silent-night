@@ -3,7 +3,7 @@ import uuid
 from abc import ABC, abstractmethod
 
 class Lobby:
-    def __init__(self, host, game_code=None):
+    def __init__(self, host: 'User', game_code=None):
         self.code = game_code
         self.host_id = host.id
         host.is_host = True
@@ -16,7 +16,7 @@ class Lobby:
         self.eliminated = []
         self.remaining_players = len(self.users) - len(self.eliminated)
     
-    def add_user(self, user):
+    def add_user(self, user: 'User'):
         if self.game_state != 'lobby':
             raise ValueError('Game is already in progress')
         self.users[user.id] = user
@@ -37,7 +37,7 @@ class Lobby:
     def start_game(self):
         """Assign roles, validate users and settings and start game"""
         # Check if there are enough players to fill roles
-        total_special_roles = self.settings['Serial Killers'] + self.settings['Spies']
+        total_special_roles = sum(self.settings.values())
         if len(self.users) < total_special_roles:
             raise ValueError('Not enough players to start the game')
         
@@ -62,7 +62,18 @@ class Lobby:
             self.users[user_ids[i]].role = Spy()
         # Assign civilians to remaining users
         for i in range(self.settings['Serial Killers'] + self.settings['Spies'], len(user_ids)):
-            self.users[user_ids[i]].role = Civilian()
+            self.users[user_ids[i]].assign_role(Civilian())
+
+    """ def assign_roles(self, user_ids):
+            # Fill list of all available roles
+            roles = []
+            for role, count in self.settings.items():
+                roles.extend([role] * count) ?
+            default_role = 'Civilian'
+            remaining = len(user_ids) - len(roles)
+            roles.extend([default_role] * remaining)
+            # assign roles from list
+            """
 
     def to_dict(self):
         """Convert Lobby to a dict for storing in memory"""
@@ -75,6 +86,13 @@ class Lobby:
             'remaining_players': self.remaining_players
         }
 
+    def new_game(self):
+        for id, user in self.users.items():
+            self.users[id[user]].reset()
+        # Alternative, access instance directly, no need for ids as everyone is reset. Also accesses instance method directly 
+        # for user in self.users.values(): 
+            # user.reset()
+
 # user.role = roleClass() to assign or user.assign_role(roleClass())
 class User:
     def __init__(self, username, user_id=None):
@@ -84,10 +102,10 @@ class User:
         self.role = None # Assign at game start
         self.is_host = False # Assign host when creating lobby, only host can change rules
 
-    # def assign_role(self, role):
-    #     self.role = role
+    def assign_role(self, role: 'Role'):
+        self.role = role
     
-    def eliminate(self):
+    def eliminated(self):
         self.alive = False
 
     def reset(self):
@@ -121,11 +139,11 @@ class Role(ABC):
 class SerialKiller(Role):
     def __init__(self):
         super().__init__('Serial Killer')
-        self.view_roles = ['Serial Killer']
+        self.visible_to = ['Serial Killer']
     
     def night_action(self):
         chosen = input('Pick a player to eliminate')
-        return chosen
+        chosen.eliminated()
 
 
 class Spy(Role):
@@ -134,8 +152,10 @@ class Spy(Role):
 
     def night_action(self):
         chosen = input('Choose a player to investigate')
-        return chosen
+        self.reveal(chosen)
 
+    def reveal(self, target: 'User'):
+        return target.role.name
     
 class Civilian(Role):
     def __init__(self):
