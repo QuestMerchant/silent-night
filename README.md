@@ -13,4 +13,4 @@ redis_service is connecting information from lobby to redis and to app.py
 ## Frontend
 Vue
 Currently have a template that has nothing to do with the app
-Setup to use TypeScript if preferred.
+
