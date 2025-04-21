@@ -2,6 +2,8 @@ import random
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections import defaultdict
+
 
 class Lobby:
     def __init__(self, host: 'User', game_code=None):
@@ -17,13 +19,23 @@ class Lobby:
             'night length': 10,
             'day length': 60
         }
-        self.game_state = 'lobby' # lobby, night, voting/day
+        self.role_map = {
+            'Serial Killer': SerialKiller(),
+            'Spy': Spy(),
+            'Civilian': Civilian()
+        }
+        self.game_state = 'lobby' # lobby, game started
         self.eliminated = []
         self.remaining_players = []
         self.remaining_players_number = len(self.remaining_players)
-        self.killers = []
-        self.spies = []
+        self.assigned_roles = defaultdict(list) # regular_dict = dict(self.assigned_roles)
+        self.day_timer = Timer(self.settings['day length'])
+        self.night_timer = Timer(self.settings['night length'])
     
+    def is_username_taken(self, username):
+        if any(user.username == username for user in self.users.values()):
+            raise ValueError('Username is taken')
+
     def add_user(self, user: 'User'):
         if self.game_state != 'lobby':
             raise ValueError('Game is already in progress')
@@ -53,40 +65,40 @@ class Lobby:
         if len(self.users) <= self.settings['Serial Killers'] // 2: # Either killers win immediately or one night occurs and they auto win
             raise ValueError('Too many killers for amount of players')
         
-        # Set voting instance
-        self.vote = Vote(self, self.settings['day length'])
-        
         # Assign roles
         user_ids = list(self.users.keys())
         random.shuffle(user_ids)
         self.assign_roles(user_ids)
 
-        self.game_state = 'night'
+        self.game_state = 'game started'
 
-    def assign_roles(self, user_ids): # Figure out a different method to iterate as this will bloat as more roles are added
-        # Assign killers
-        for i in range(self.settings['Serial Killers']):
-            self.users[user_ids[i]].role = SerialKiller()
-            self.killers.append(user_ids[i])
-        # Assign spies
-        for i in range(self.settings['Serial Killers'], 
-                       self.settings['Serial Killers'] + self.settings['Spies']):
-            self.users[user_ids[i]].role = Spy()
-            self.spies.append(user_ids[i])
-        # Assign civilians to remaining users
-        for i in range(self.settings['Serial Killers'] + self.settings['Spies'], len(user_ids)):
-            self.users[user_ids[i]].assign_role(Civilian())
+    def assign_roles(self, user_ids):
+        # Fill list of all available roles
+        roles = []
+        for role, count in self.settings['roles'].items():
+            roles.extend([role] * count)
+        default_role = 'Civilian'
+        remaining = len(user_ids) - len(roles)
+        roles.extend([default_role] * remaining)
+        # Assign roles from role list
+        for i, user_id in enumerate(user_ids):
+            self.users[user_id].role = self.create_role(roles[i], user_id)
 
-    """ def assign_roles(self, user_ids):
-            # Fill list of all available roles
-            roles = []
-            for role, count in self.settings.items():
-                roles.extend([role] * count) ?
-            default_role = 'Civilian'
-            remaining = len(user_ids) - len(roles)
-            roles.extend([default_role] * remaining)
-            # assign roles from list
-            """
+    """Role Factory"""    
+    def create_role(self, role_name, user_id):
+        if role_name == 'Serial Killers':
+            self.assigned_roles['killers'].append(user_id)
+            return self.role_map['Serial Killer']
+        elif role_name == 'Spies':
+            self.assigned_roles['spies'].append(user_id)
+            return self.role_map['Spy']
+        else:
+            return self.role_map['Civilian']
+
+    def day_phase(self):
+        # Set voting instance
+        self.day_vote = Vote(self, 'lobby')
+        self.day_vote.start_voting()
 
     def night_action_phase(self):
         for user in self.users.values():
@@ -109,7 +121,7 @@ class Lobby:
 
 
     def eliminate(self, user_id):
-        self.users[user_id].eliminated()
+        self.users[user_id].alive = False
         self.eliminated.append(self.users[user_id].id)
         self.remaining_players.remove(self.users[user_id].id)
 
@@ -117,11 +129,14 @@ class Lobby:
         for user in self.users.values(): 
             self.remaining_players.append(user.id)
             user.reset()
+        self.game_state = 'lobby'
+        self.assigned_roles = defaultdict(list)
 
 # user.role = roleClass() to assign or user.assign_role(roleClass())
 class User:
-    def __init__(self, username, user_id=None):
+    def __init__(self, username: str, avatar: str, user_id=None):
         self.username = username
+        self.avatar = avatar
         self.id = user_id or str(uuid.uuid4())
         self.alive = True # Alive by default
         self.role = None # Assign at game start
@@ -129,9 +144,6 @@ class User:
 
     def assign_role(self, role: 'Role'):
         self.role = role
-    
-    def eliminated(self):
-        self.alive = False
 
     def reset(self):
         self.alive = True
@@ -153,18 +165,26 @@ class Vote:
         self.votes = {} # key: user, value: number of votes
         self.user_vote = {} # key: voter_id, value: user_voted 
         self.leading_votes = [] # List of user/s with most votes
-        self.timer = Timer(self, duration)
         self.voters = voters # Killers or lobby
+        if self.voters == 'lobby':
+            self.timer = self.lobby.day_timer
+        elif self.voters == 'killers':
+            self.timer = self.lobby.night_timer
 
     def start_voting(self):
         # Add all active users with 0 votes
         self.votes = {user_id: 0 for user_id in self.lobby.users.keys() if user_id in self.lobby.remaining_players}
         self.user_vote = {}
-        self.timer.start_time = time.time()
-        self.timer.active = True
-        self.timer._run_timer()
+        self.timer.start(self)
 
     def cast_vote(self, voter_id, target_id):
+        # Validate target is alive
+        if target_id not in self.lobby.remaining_players:
+            raise ValueError("Invalid target") # Maybe validate in redis_service.py?
+        # Killers can't vote other killers
+        if self.voters == 'killers':
+            if target_id in self.lobby.killers:
+                raise ValueError("Can't kill a killer")
         # Remove previous vote if exists
         if voter_id in self.user_vote:
             prev_target = self.user_vote[voter_id]
@@ -206,11 +226,11 @@ class Vote:
     
 
 class Timer:
-    def __init__(self, vote: 'Vote', duration: int):
+    def __init__(self, duration: int):
         self.active = False
         self.duration = duration
         self.start_time = 0
-        self.vote = vote
+        self.vote = None
 
     def _get_remaining_time(self) -> int:
         if not self.active:
@@ -221,18 +241,29 @@ class Timer:
     
     def _run_timer(self):
         while self.active and self._get_remaining_time() > 0:
-            # Check for max votes to end timer early
-            voted = self.vote.check_majority()
-            if voted:
-                self.active = False
-                return voted
+            if self.vote:
+                # Check for max votes to end timer early
+                voted = self.vote.check_majority()
+                if voted:
+                    # End Voting period if lobby
+                    if self.vote.voters == 'lobby':
+                        self.active = False
+                        return voted
+            # Add functionality to check if all night actions are completed to end timer early
             time.sleep(0.1)
         
         # Time completed
         if self.active:
             self.active = False
             return self.vote.get_leading_vote()
-    
+        
+    def start(self, vote: Vote = None):
+        if vote:
+            self.vote = vote
+        self.active = True
+        self.start_time = time.time()
+        self._run_timer()
+
 
 class Role(ABC):
     def __init__(self, name):
@@ -270,6 +301,8 @@ class SerialKiller(Role):
     def night_action(self, lobby: 'Lobby'):
         active_players = lobby.remaining_players
         # vote for kill
+        voting = Vote(lobby, 'killers')
+        voting.start_voting()
         # send list of active ids, to verify valid vote
 
     def perform_night_action(self, target_id: 'User.id', lobby: 'Lobby'):

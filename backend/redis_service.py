@@ -46,9 +46,9 @@ class GameService:
             ex=self.lobby_ttl
         )
 
-    def create_lobby(self, host_name: str):
+    def create_lobby(self, host_name: str, host_avatar: str):
         """Create new lobby with a host user"""
-        host = User(host_name)
+        host = User(host_name, host_avatar)
         code = self._generate_code()
         key = self._get_lobby_key(code)
         lobby = Lobby(host, key)
@@ -64,18 +64,20 @@ class GameService:
             'host_id': host.id
         }
 
-    def join_lobby(self, code: str, username: str) -> dict:
+    def join_lobby(self, code: str, username: str, avatar: str) -> dict:
         """Add new user to an existing lobby"""
         lobby: Lobby = self._get_lobby(code)
-            
+
+        # Check if username is taken
+        lobby.is_username_taken(username)
+
         # Create and add user to lobby
-        user = User(username)
+        user = User(username, avatar)
         lobby.add_user(user)
 
         # Save to Redis
         self._save_lobby()
 
         return {
-            'lobby_code': lobby.code,
             'user_id': user.id
         }

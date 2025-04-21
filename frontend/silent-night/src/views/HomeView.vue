@@ -1,29 +1,29 @@
 <template>
-  <div class="row justify-evenly">
-    <div class="col">
-      <h1>Silent Night</h1>
+  <div class="row">
+    <div class="col text-h1 text-center q-py-sm">
+      Silent Night
     </div>
   </div>
-  <main class="row">
-    <div class="col-3">
+  <main class="row q-mx-xl justify-center q-gutter-sm">
+    <div class="col-lg-3 col-md-6 col-sm-12 col-xs-12">
       <Avatar @update="(s) => url = s" />
     </div>
-    <div class="column col-3 flex-center">
-      <div class="col-2">      
+    <div class="column col-lg-2 col-md-6 col-sm-12 col-xs-12 flex-center q-gutter-sm">
+      <div class="">      
         <q-input outlined v-model="username" label="Username" />
       </div>
-      <div class="col-1">
+      <div class="">
         <q-input outlined v-model="code" label="Room Code" />
       </div>
     </div>
-    <div class="column col-2 flex-center">
-      <div class="col-1">
+    <div class="column col-lg-2 col-md-6 col-sm-12 col-xs-12 flex-center q-gutter-sm">
+      <div class="">
         <q-btn @click="joinLobby" push color="primary" label="Join" />
       </div>
-      <div class="col-1">
-        <p>Or</p>
+      <div class="">
+        Or
       </div>
-      <div class="col-1">
+      <div class="">
         <q-btn @click="createLobby" push color="primary" label="Create new Game" />
       </div>
     </div>
@@ -34,11 +34,14 @@
 import { ref} from 'vue'
 import Avatar from '../components/Avatar.vue'
 import { useRouter } from 'vue-router'
+import { setCookie } from '@/util/cookies'
 
 const url = ref(null)
 const username = ref("")
 const code = ref("")
 const userID = ref(null)
+const router = useRouter()
+
 
 async function joinLobby() {
   if (!username.value || !code.value) {
@@ -47,7 +50,7 @@ async function joinLobby() {
   }
 
   try {
-    const response = await axios.post('/api/join-lobby', {
+    const response = await axios.post('http://127.0.0.1:5000/join-lobby', {
       name: username.value,
       lobby_code: code.value
     })
@@ -63,19 +66,20 @@ async function createLobby() {
   if (!username.value) {
     alert('Please enter a username')
   }
-  
-  const router = useRouter()
 
   try {
-    const response = await axios.post('/api/create-lobby', {
-      name: username.value
+    const response = await axios.post('http://127.0.0.1:5000/create-lobby', {
+      name: username.value,
+      avatar: url.value
     })
     code.value = response.data.lobby_code
     userID.value = response.data.host_id
-    router.push(`/${code}`)
+    setCookie('userID', `${userID.value}`, 30)
+    router.push(`/${code.value}`)
   } catch (error) {
     console.error('Error creating lobby:', error)
     alert('Failed to create a new lobby')
   }
 }
 </script>
+
