@@ -1,53 +1,59 @@
 <template>
-  <div class="column items-center q-gutter-sm" style="height: 100%">
-    <h4>Customize your avatar</h4>
-    <img :src=avatar alt="avatar" />
-    <div>
-      <button @click="selectedEyes--" :disabled="selectedEyes === 0">&lt;</button>
-      <span class="q-mx-sm">Eyes</span>
-      <q-btn @click="selectedEyes++" :disable="selectedEyes === eyes.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
-    </div>
-    <div>
-      <button @click="selectedEyebrows--" :disabled="selectedEyebrows === 0">&lt;</button>
-      <span class="q-mx-sm">Eyebrows</span>
-      <button @click="selectedEyebrows++" :disabled="selectedEyebrows === eyebrows.length - 1">&gt;</button>
-    </div>
-    <div>
-      <button @click="selectedFeat--" :disabled="selectedFeat === 0">&lt;</button>
-      <span class="q-mx-sm">Features</span>
-      <button @click="selectedFeat++" :disabled="selectedFeat === features.length - 1">&gt;</button>
-    </div>
-    <div>
-      <button @click="selectedGlasses--" :disabled="selectedGlasses === 0">&lt;</button>
-      <span class="q-mx-sm">Glasses</span>
-      <button @click="selectedGlasses++" :disabled="selectedGlasses === glasses.length - 1">&gt;</button>
-    </div>
-    <div>
-      <button @click="selectedHair--" :disabled="selectedHair === 0">&lt;</button>
-      <span class="q-mx-sm">Hair Style</span>
-      <button @click="selectedHair++" :disabled="selectedHair === hair.length - 1">&gt;</button>
-    </div>
-    <div>
-      <button @click="selectedHairColor--" :disabled="selectedHairColor === 0">&lt;</button>
-      <span class="q-mx-sm">Hair Colour</span>
-      <button @click="selectedHairColor++" :disabled="selectedHairColor === hairColor.length - 1">&gt;</button>
-    </div>
-    <div>
-      <button @click="selectedMouth--" :disabled="selectedMouth === 0">&lt;</button>
-      <span class="q-mx-sm">Mouth</span>
-      <button @click="selectedMouth++" :disabled="selectedMouth === mouth.length - 1">&gt;</button>
-    </div>
-    <div>
-      <button @click="selectedSkinColor--" :disabled="selectedSkinColor === 0">&lt;</button>
-      <span class="q-mx-sm">Skin Colour</span>
-      <button @click="selectedSkinColor++" :disabled="selectedSkinColor === skinColor.length - 1">&gt;</button>
-    </div>
-  </div>
+  <q-card class="avatar-card" style="height: 100%">
+    <q-card-section>
+      <div class="text-h6 text-center">Customize Your Avatar</div>
+    </q-card-section>
+    <q-separator />
+    <img :src=avatar alt="avatar" style="padding: 4px; max-width: 90%; margin-left: auto; margin-right: auto;" />
+    <q-separator />
+    <q-card-section>
+      <q-card-actions align="around">
+        <q-btn @click="selectedEyes--" :disabled="selectedEyes === 0" push color="primary" rounded :icon="fasLeftLong" size="sm" />
+        <span class="q-mx-sm text-center">Eyes</span>
+        <q-btn @click="selectedEyes++" :disable="selectedEyes === eyes.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
+      </q-card-actions>
+      <q-card-actions align="around">
+        <q-btn @click="selectedEyebrows--" :disabled="selectedEyebrows === 0" push color="primary" rounded :icon="fasLeftLong" size="sm" />
+        <span class="q-mx-sm text-center">Eyebrows</span>
+        <q-btn @click="selectedEyebrows++" :disabled="selectedEyebrows === eyebrows.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
+      </q-card-actions>
+      <q-card-actions align="around">
+        <q-btn @click="selectedFeat--" :disabled="selectedFeat === 0" push color="primary" rounded :icon="fasLeftLong" size="sm" />
+        <span class="q-mx-sm text-center">Features</span>
+        <q-btn @click="selectedFeat++" :disabled="selectedFeat === features.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
+      </q-card-actions>
+      <q-card-actions align="around">
+        <q-btn @click="selectedGlasses--" :disabled="selectedGlasses === 0" push color="primary" rounded :icon="fasLeftLong" size="sm" />
+        <span class="q-mx-sm text-center">Glasses</span>
+        <q-btn @click="selectedGlasses++" :disabled="selectedGlasses === glasses.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
+      </q-card-actions>
+      <q-card-actions align="around">
+        <q-btn @click="selectedHair--" :disabled="selectedHair === 0" push color="primary" rounded :icon="fasLeftLong" size="sm" />
+        <span class="q-mx-sm text-center">Hair Style</span>
+        <q-btn @click="selectedHair++" :disabled="selectedHair === hair.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
+      </q-card-actions>
+      <q-card-actions align="around">
+        <q-btn @click="selectedHairColor--" :disabled="selectedHairColor === 0" push color="primary" rounded :icon="fasLeftLong" size="sm" />
+        <span class="q-mx-sm text-center">Hair Colour</span>
+        <q-btn @click="selectedHairColor++" :disabled="selectedHairColor === hairColor.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
+      </q-card-actions>
+      <q-card-actions align="around">
+        <q-btn @click="selectedMouth--" :disabled="selectedMouth === 0" push color="primary" rounded :icon="fasLeftLong" size="sm" />
+        <span class="q-mx-sm text-center">Mouth</span>
+        <q-btn @click="selectedMouth++" :disabled="selectedMouth === mouth.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
+      </q-card-actions>
+      <q-card-actions align="around">
+        <q-btn @click="selectedSkinColor--" :disabled="selectedSkinColor === 0" push color="primary" rounded :icon="fasLeftLong" size="sm" />
+        <span class="q-mx-sm text-center">Skin Colour</span>
+        <q-btn @click="selectedSkinColor++" :disabled="selectedSkinColor === skinColor.length - 1" push color="primary" rounded :icon="fasRightLong" size="sm" />
+      </q-card-actions>
+    </q-card-section>
+  </q-card>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
-import { fasCircleRight, fasRightLong } from '@quasar/extras/fontawesome-v6'
+import { fasLeftLong, fasRightLong } from '@quasar/extras/fontawesome-v6'
 
 
 const emit = defineEmits({
