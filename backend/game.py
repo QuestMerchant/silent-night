@@ -1,5 +1,4 @@
 import random
-import time
 import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -26,11 +25,13 @@ class Lobby:
         }
         self.game_state = 'lobby' # lobby, game started
         self.eliminated = []
-        self.remaining_players = []
+        self.remaining_players = [] 
         self.remaining_players_number = len(self.remaining_players)
         self.assigned_roles = defaultdict(list) # regular_dict = dict(self.assigned_roles)
-        self.day_timer = Timer(self.settings['day length'])
-        self.night_timer = Timer(self.settings['night length'])
+        self.timer = None
+        self.votes = {}
+        self.user_vote = {}
+        self.leading_votes = []
     
     def is_username_taken(self, username):
         if any(user.username == username for user in self.users.values()):
@@ -131,6 +132,8 @@ class Lobby:
             user.reset()
         self.game_state = 'lobby'
         self.assigned_roles = defaultdict(list)
+
+
 
 # user.role = roleClass() to assign or user.assign_role(roleClass())
 class User:

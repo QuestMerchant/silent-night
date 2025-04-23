@@ -55,7 +55,8 @@ async function joinLobby() {
       lobby_code: code.value
     })
     userID.value = response.data.user_id
-
+    setCookie('userID', `${userID.value}`, 30)
+    router.push(`/${code.value}`)
   } catch (error) {
     console.error('Error joining lobby:', error)
     alert('Failed to join lobby:' + (error.response?.data?.error || 'Unknown error'))

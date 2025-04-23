@@ -2,8 +2,10 @@ import json
 import random
 import redis
 import string
+import asyncio
 from game import User, Lobby
 from typing import Optional
+from voting import setup_vote, check_majority, get_leading_vote, all_voted, timer
 
 
 
@@ -64,7 +66,7 @@ class GameService:
             'host_id': host.id
         }
 
-    def join_lobby(self, code: str, username: str, avatar: str) -> dict:
+    def join_lobby(self, code: str, username: str, avatar: str, user_id: Optional[str]) -> dict:
         """Add new user to an existing lobby"""
         lobby: Lobby = self._get_lobby(code)
 
@@ -81,3 +83,62 @@ class GameService:
         return {
             'user_id': user.id
         }
+    
+    def game_start(self, code: str):
+        lobby: Lobby = self._get_lobby(code)
+        # TODO
+        # Assign roles, emit socket to change to game
+        lobby.game_state = 'night'
+
+    """ Voting """
+    async def begin_vote(self, code: str):
+        lobby: Lobby = self._get_lobby(code)
+        lobby.votes, lobby.user_vote, lobby.leading_votes = setup_vote(lobby.remaining_players)
+        start_time = asyncio.get_event_loop().time()
+
+        if lobby.game_state == 'day':
+            task_timer = asyncio.create_task(timer(lobby.settings['day length']))
+            lobby.timer = task_timer 
+            await task_timer
+            # Finalize vote. Eliminate player, emit result
+
+        elif lobby.game_state == 'night':
+            task_timer = asyncio.create_task(timer(lobby.settings['night length']))
+            lobby.timer = task_timer 
+            await task_timer
+            # Finalize outcome
+        voted_user = get_leading_vote(lobby.votes)
+        # Check if saved (future roles)
+        if voted_user:
+            lobby.eliminate(voted_user)
+        # Save to Redis
+        self._save_lobby()
+
+    def cast_vote(self, code: str, voter_id, target_id):
+        lobby: Lobby = self._get_lobby(code)
+        # Validate target is alive
+        if target_id not in lobby.remaining_players:
+            raise ValueError("Invalid target")
+        # Killers can't vote to kill another killer
+        if lobby.game_state == 'night':
+            active_killers = [killer for killer in lobby.assigned_roles['killers'] if lobby.users[killer].alive] 
+            if target_id in lobby.assigned_roles['killers']:
+                raise ValueError("Can't kill a killer")
+            
+        # Remove existing previous vote
+        if voter_id in lobby.user_vote.keys():
+            prev_target = lobby.user_vote[voter_id]
+            lobby.votes[prev_target] -= 1
+        
+        # Add new vote
+        lobby.user_vote[voter_id] = target_id
+        lobby.votes[target_id] += 1
+
+        # Run checks for majority or all voted
+        if lobby.game_state == 'day':
+            voters = lobby.remaining_players_number
+        elif lobby.game_state == 'night':
+            voters = len(active_killers)
+        if check_majority(voters, lobby.votes) or all_voted(voters, len(lobby.user_vote)):
+            task = lobby.timer
+            task.cancel()
