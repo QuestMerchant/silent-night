@@ -54,19 +54,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { fasLeftLong, fasRightLong } from '@quasar/extras/fontawesome-v6'
+import { useUserStore } from '../stores/user'
+
+const user = useUserStore()
 
 
-const emit = defineEmits({
-  update: (url) => {
-    // Validate update event
-    if (url) {
-      return true
-    } else {
-      console.warn('Invalid event payload')
-      return false
-    }
-  }
-})
 
 // Options. Do Not Change!
 const eyes = ["variant01", "variant02", "variant03", "variant04", "variant05", "variant06", "variant07", 
@@ -114,7 +106,7 @@ const avatar = computed(() => {
   if (selectedGlasses.value !== 0) {
     url += `&glasses=${glasses[selectedGlasses.value]}&glassesProbability=100`
   }
-  emit('update', url)
+  user.avatar = url // Update the avatar in the user store
   return url // Send to redis as well
 })
 

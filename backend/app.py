@@ -1,61 +1,126 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import Optional
+import pusher
+import os
+import random
 from redis_service import GameService
-import asyncio
 
-app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
-socketio = SocketIO(app, cors_allowed_origins="*")
+app = FastAPI()
+
+# Initialize Pusher (you'll need to set these as environment variables)
+pusherClient = pusher.Pusher(
+    app_id=os.getenv('PUSHER_APP_ID', ''),
+    key=os.getenv('PUSHER_KEY', ''),
+    secret=os.getenv('PUSHER_SECRET', ''),
+    cluster=os.getenv('PUSHER_CLUSTER', 'eu'),
+    ssl=True
+)
 
 # Initialize Redis
-game_service = GameService()
+gameService = GameService()
 
-# Requires Vue app to be built
-@app.route('/')
-@app.route('/<path:path>')
-def serve_vue(path='index.html'):
-    return send_from_directory(app.static_folder, path)
+# Pydantic models
+class CreateLobbyRequest(BaseModel):
+    avatar: str
 
-@app.route('/create_lobby', methods=['POST'])
-def create_lobby():
-    data: dict = request.json
-    username = data.get('name')
-    avatar = data.get('avatar')
+class CreateLobbyResponse(BaseModel):
+    username: str
+    lobbyCode: str
+    userId: str
+
+class JoinLobbyRequest(BaseModel):
+    avatar: str
+    lobbyCode: str
+    userId: Optional[str] = None
+
+class JoinLobbyResponse(BaseModel):
+    userId: str
+    username: str
+
+class StartGameRequest(BaseModel):
+    lobbyCode: str
+
+# Helper function to generate random username
+def generateUsername() -> str:
+    adjectives = ['Swift', 'Silent', 'Shadow', 'Mystic', 'Brave', 'Clever', 'Fierce', 'Noble', 'Wise', 'Bold']
+    nouns = ['Wolf', 'Raven', 'Fox', 'Eagle', 'Tiger', 'Lion', 'Bear', 'Hawk', 'Falcon', 'Panther']
+    number = random.randint(100, 999)
+    return f"{random.choice(adjectives)}{random.choice(nouns)}{number}"
+
+# Serve frontend (optional)
+@app.get("/")
+async def serve_frontend():
+    frontend_path = '../frontend/dist/index.html'
+    if os.path.exists(frontend_path):
+        return FileResponse(frontend_path)
+    return {"message": "Frontend not built"}
+
+@app.get("/{path:path}")
+async def serve_static(path: str):
+    static_path = f'../frontend/dist/{path}'
+    if os.path.exists(static_path):
+        return FileResponse(static_path)
+    raise HTTPException(status_code=404, detail="File not found")
+
+@app.post("/create_lobby", response_model=CreateLobbyResponse)
+async def createLobby(request: CreateLobbyRequest):
     try:
-        lobby = game_service.create_lobby(username, avatar)
-        return jsonify(lobby) # lobby_code : key, host_id: id
+        # Generate random username
+        username = generateUsername()
+        
+        # Create lobby in Redis
+        lobby = gameService.create_lobby(username, request.avatar)
+        
+        return CreateLobbyResponse(
+            username=username,
+            lobbyCode=lobby['lobby_code'],
+            userId=lobby['host_id']
+        )
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        raise HTTPException(status_code=400, detail=str(e))
 
-@app.route('join_lobby', methods=['POST'])
-def join_lobby():
-    data: dict = request.json
-    username = data.get('username')
-    code = data.get('code')
-    avatar = data.get('avatar')
-    user_id = data.get('userID')
+@app.post("/join_lobby", response_model=JoinLobbyResponse)
+async def joinLobby(request: JoinLobbyRequest):
     try:
-        lobby = game_service.join_lobby(code, username, avatar, user_id)
-
-        # Send message to lobby
-        socketio.emit('user_joined', {
-            'name': username
-        })
-        return jsonify(lobby) # user_id: id
+        # Generate random username
+        username = generateUsername()
+        
+        # Join lobby in Redis
+        result = gameService.join_lobby(
+            request.lobbyCode,
+            username,
+            request.avatar,
+            request.userId
+        )
+        
+        # Send Pusher event
+        pusherClient.trigger(
+            f'lobby-{request.lobbyCode}',
+            'user_joined',
+            {'name': username}
+        )
+        
+        return JoinLobbyResponse(
+            userId=result['user_id'],
+            username=username
+        )
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        raise HTTPException(status_code=400, detail=str(e))
 
-@app.route('start', methods=['POST'])
-def start():
-    data: dict = request.json
-    code = data.get('code')
-    game_service.game_start(code)
-
-@app.route('start_day', methods=['POST'])
-def start_day():
-    data: dict = request.json
-    code = data.get('code')
+@app.post("/start_game")
+async def startGame(
+    request: StartGameRequest,
+    user_id: Optional[str] = Header(None, alias="user-id")
+):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="user-id header required")
+    
     try:
-        asyncio.create_task(game_service.begin_vote(code))
-        return jsonify({'success': True})
+        # Verify user is host (you'll add this check in game_start method later)
+        gameService.game_start(request.lobbyCode)
+        
+        return {"success": True}
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        raise HTTPException(status_code=400, detail=str(e))
