@@ -6,7 +6,7 @@
   </div>
   <main class="row q-mx-xl justify-center q-gutter-sm">
     <div class="col-lg-3 col-md-6 col-sm-12 col-xs-12">
-      <Avatar @update="(s) => url = s" />
+      <Avatar />
     </div>
     <div class="column col-lg-2 col-md-6 col-sm-12 col-xs-12 flex-center q-gutter-sm">
       <div class="">      
@@ -34,13 +34,16 @@
 import { ref} from 'vue'
 import Avatar from '../components/Avatar.vue'
 import { useRouter } from 'vue-router'
-import { setCookie } from '@/util/cookies'
+import { setCookie } from '../util/cookies'
+import { useUserStore } from '../stores/user'
+import { useGameStore } from '../stores/game'
 
-const url = ref(null)
+const user = useUserStore()
 const username = ref("")
 const code = ref("")
-const userID = ref(null)
 const router = useRouter()
+const game = useGameStore()
+
 
 
 async function joinLobby() {
@@ -48,14 +51,16 @@ async function joinLobby() {
     alert('Please enter both a username and valid lobby code')
     return
   }
-
   try {
     const response = await axios.post('http://127.0.0.1:5000/join-lobby', {
       name: username.value,
-      lobby_code: code.value
+      lobby_code: code.value,
+      avatar: user.avatar
     })
-    userID.value = response.data.user_id
-
+    user.changeUsername(username.value)
+    user.id = response.data.user_id
+    setCookie('userID', `${user.id}`, 30)
+    router.push(`/${code.value}`)
   } catch (error) {
     console.error('Error joining lobby:', error)
     alert('Failed to join lobby:' + (error.response?.data?.error || 'Unknown error'))
@@ -66,15 +71,17 @@ async function createLobby() {
   if (!username.value) {
     alert('Please enter a username')
   }
-
   try {
     const response = await axios.post('http://127.0.0.1:5000/create-lobby', {
       name: username.value,
-      avatar: url.value
+      avatar: user.avatar
     })
+    game.hostName = username.value
     code.value = response.data.lobby_code
-    userID.value = response.data.host_id
-    setCookie('userID', `${userID.value}`, 30)
+    user.id = response.data.host_id
+    user.isHost = true
+    user.changeUsername(username.value)
+    setCookie('userID', `${user.id}`, 30)
     router.push(`/${code.value}`)
   } catch (error) {
     console.error('Error creating lobby:', error)

@@ -4,7 +4,7 @@
         <q-scroll-area class="col-md-8 col-xl-6 col-sm-12">
             <div class="row justify-center q-gutter-sm">
                 <q-intersection
-                    v-for="user in users"
+                    v-for="player in players"
                     :key="userID"
                     transition="scale"
                     class="user_card col-4"
@@ -30,8 +30,24 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useUserStore, usePlayersStore } from '../stores/user'
+import { useGameStore } from '../stores/game'
 
+const user = useUserStore()
+const avatar = user.avatar
+const userID = user.userID
+const userName = user.username
+const game = useGameStore()
+const phase = game.gameState
 
+// Vote section
+const vote = ref('')
+
+// Fetch role
+const userRole = ref('')
+
+// Fetch players
+const players = ref([])
 </script>
 
 <style lang="scss" scoped>

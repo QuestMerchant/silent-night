@@ -1,6 +1,5 @@
 <script setup>
 import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
 </script>
 
 <template>
@@ -10,7 +9,7 @@ import HelloWorld from './components/HelloWorld.vue'
     </q-page-container>
   </q-layout>
 </template>
-
+lHh Lpr lFf
 <style scoped>
 
 </style>

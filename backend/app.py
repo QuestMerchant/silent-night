@@ -1,43 +1,155 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import Optional
+import pusher
+import os
+import random
 from redis_service import GameService
 
-app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
-socketio = SocketIO(app, cors_allowed_origins="*")
+app = FastAPI()
+
+# Initialize Pusher (you'll need to set these as environment variables)
+pusherClient = pusher.Pusher(
+    app_id=os.getenv('PUSHER_APP_ID', ''),
+    key=os.getenv('PUSHER_KEY', ''),
+    secret=os.getenv('PUSHER_SECRET', ''),
+    cluster=os.getenv('PUSHER_CLUSTER', 'eu'),
+    ssl=True
+)
 
 # Initialize Redis
-game_service = GameService()
+gameService = GameService()
 
-# Requires Vue app to be built
-@app.route('/')
-@app.route('/<path:path>')
-def serve_vue(path='index.html'):
-    return send_from_directory(app.static_folder, path)
+# Pydantic models
+class CreateLobbyRequest(BaseModel):
+    avatar: str
+    username: str
 
-@app.route('/create_lobby', methods=['POST'])
-def create_lobby():
-    data: dict = request.json
-    username = data.get('name')
-    avatar = data.get('avatar')
-    try:
-        lobby = game_service.create_lobby(username, avatar)
-        return jsonify(lobby) # lobby_code : key, host_id: id
+class CreateLobbyResponse(BaseModel):
+    hostName: str
+    lobbyCode: str
+    hostId: str
+
+class JoinLobbyRequest(BaseModel):
+    avatar: str
+    lobbyCode: str
+    username: str
+    userId: Optional[str] = None
+
+class JoinLobbyResponse(BaseModel):
+    userId: str
+
+class StartGameRequest(BaseModel):
+    lobbyCode: str
+
+class NightActionRequest(BaseModel):
+    lobbyCode: str
+    targetUsername: Optional[str] = None  # Required for some roles (Spy, Serial Killer), not needed for others (Civilian)
+
+class CastVoteRequest(BaseModel):
+    lobbyCode: str
+    targetUsername: str  # Username of the player being voted for
+
+@app.post("/create_lobby", response_model=CreateLobbyResponse)
+async def createLobby(request: CreateLobbyRequest):
+    try:        
+        # Create lobby in Redis
+        lobby = gameService.create_lobby(request.username, request.avatar)
+        
+        return CreateLobbyResponse(
+            hostName=request.username,
+            lobbyCode=lobby['lobby_code'],
+            hostId=lobby['host_id']
+        )
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        raise HTTPException(status_code=400, detail=str(e))
 
-@app.route('join_lobby', methods=['POST'])
-def join_lobby():
-    data: dict = request.json
-    username = data.get('username')
-    code = data.get('code')
-    avatar = data.get('avatar')
+@app.post("/join_lobby", response_model=JoinLobbyResponse)
+async def joinLobby(request: JoinLobbyRequest):
     try:
-        lobby = game_service.join_lobby(code, username, avatar)
-
-        # Send message to lobby
-        socketio.emit('user_joined', {
-            'name': username
-        })
-        return jsonify(lobby) # user_id: idq
+        # Join lobby in Redis
+        result = gameService.join_lobby(
+            request.lobbyCode,
+            request.username,
+            request.avatar,
+            request.userId
+        )
+        
+        # Send Pusher event
+        pusherClient.trigger(
+            f'lobby-{request.lobbyCode}',
+            'system',
+            {'message': f'{request.username} has joined the lobby'}
+        )
+        
+        return JoinLobbyResponse(
+            userId=result['user_id']
+        )
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/start_game")
+async def startGame(
+    request: StartGameRequest,
+    user_id: Optional[str] = Header(None, alias="user-id")
+):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized Access")
+    
+    try:
+        # Verify user is host (you'll add this check in game_start method later)
+        gameService.game_start(request.lobbyCode, user_id)
+        
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/night_action")
+async def nightAction(
+    request: NightActionRequest,
+    user_id: Optional[str] = Header(None, alias="user-id")
+):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized Access")
+    
+    try:
+        result = gameService.perform_night_action(
+            request.lobbyCode,
+            user_id,
+            request.targetUsername
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/cast_vote")
+async def castVote(
+    request: CastVoteRequest,
+    user_id: Optional[str] = Header(None, alias="user-id")
+):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized Access")
+    
+    try:
+        result = gameService.cast_vote(
+            request.lobbyCode,
+            user_id,
+            request.targetUsername
+        )
+        
+        # Broadcast vote update to all players in lobby via Pusher
+        pusherClient.trigger(
+            f'lobby-{request.lobbyCode}',
+            'vote_update',
+            {
+                'votes': result['votes'],
+                'user_votes': result['user_votes'],
+                'is_complete': result['is_complete'],
+                'eliminated_username': result['eliminated_username']
+            }
+        )
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
