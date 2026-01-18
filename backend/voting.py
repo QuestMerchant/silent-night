@@ -1,25 +1,26 @@
 from typing import Optional
 import asyncio
 
-def setup_vote(users: list) -> tuple[dict, dict, list]:
-    # Set votes to zero for active players
-    votes = {user_id: 0 for user_id in users} # key: user, value: no. of votes
-    user_vote = {} # key: voter, value: user voted
-    leading_votes = []
+def setup_vote(usernames: list) -> tuple[dict, dict]:
+    # Set votes to zero for active players (using usernames)
+    votes = {username: 0 for username in usernames} # key: username, value: no. of votes
+    user_vote = {} # key: voter_id, value: target_username
 
-    return votes, user_vote, leading_votes
+    return votes, user_vote
 
-def check_majority(voters: int, votes: dict) -> Optional[bool]:
+def check_majority(voters: int, votes: dict) -> Optional[str]:
+    """Returns username with majority if found, None otherwise"""
     threshold = voters // 2
-    for count in votes.values():
+    for username, count in votes.items():
         if count > threshold:
-            return True
-    return False
+            return username
+    return None
 
 def all_voted(remaining: int, user_votes: int) -> bool:
     return user_votes == remaining
 
 def get_leading_vote(votes: dict) -> Optional[str]:
+    """Returns username with most votes, None if tie or no votes"""
     if not votes:
         return None
     
@@ -28,7 +29,7 @@ def get_leading_vote(votes: dict) -> Optional[str]:
     if highest_vote_count == 0:
         return None
     
-    leading_vote = [user_id for user_id, count in votes.items() if count == highest_vote_count]
+    leading_vote = [username for username, count in votes.items() if count == highest_vote_count]
     if len(leading_vote) == 1:
         return leading_vote[0]
     return None # Ties return none

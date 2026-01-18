@@ -1,7 +1,9 @@
 import random
 import uuid
+import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from typing import Optional
 
 
 class Lobby:
@@ -25,13 +27,22 @@ class Lobby:
         }
         self.game_state = 'lobby' # lobby, game started
         self.eliminated = []
-        self.remaining_players = [] 
+        self.remaining_players = [] # list of usernames
         self.remaining_players_number = len(self.remaining_players)
         self.assigned_roles = defaultdict(list) # regular_dict = dict(self.assigned_roles)
-        self.timer = None
-        self.votes = {}
-        self.user_vote = {}
-        self.leading_votes = []
+        self.votes = {}  # {username: vote_count}
+        self.user_vote = {}  # {voter_id: target_username}
+    
+    @property
+    def killers(self):
+        """Return list of killer usernames"""
+        killer_ids = self.assigned_roles.get('killers', [])
+        return [self.users[killer_id].username for killer_id in killer_ids if killer_id in self.users]
+    
+    @property
+    def active_killers(self):
+        """Return list of active (alive) killer usernames"""
+        return [username for username in self.killers if username in self.remaining_players]
     
     def is_username_taken(self, username):
         if any(user.username == username for user in self.users.values()):
@@ -70,8 +81,14 @@ class Lobby:
         user_ids = list(self.users.keys())
         random.shuffle(user_ids)
         self.assign_roles(user_ids)
+        
+        # Initialize remaining players list with usernames
+        self.remaining_players = [user.username for user in self.users.values()]
+        self.remaining_players_number = len(self.remaining_players)
 
-        self.game_state = 'game started'
+        # Start night phase
+        self.game_state = 'night'
+        self.night_action_phase()
 
     def assign_roles(self, user_ids):
         # Fill list of all available roles
@@ -96,14 +113,26 @@ class Lobby:
         else:
             return self.role_map['Civilian']
 
-    def day_phase(self):
-        # Set voting instance
-        self.day_vote = Vote(self, 'lobby')
-        self.day_vote.start_voting()
-
-    def night_action_phase(self):
+    def check_win_conditions(self) -> Optional[dict]:
+        """Check win conditions for all roles. Returns winning team info or None"""
+        # Group users by role to check team win conditions
+        role_groups = {}
         for user in self.users.values():
-            user.role.night_action(self)
+            if user.alive and user.role:
+                role_name = user.role.name
+                if role_name not in role_groups:
+                    role_groups[role_name] = []
+                role_groups[role_name].append(user)
+        
+        # Check win condition for each unique role
+        for role_name, users in role_groups.items():
+            if users and users[0].role.check_win_condition(self):
+                return {
+                    "winner": role_name,
+                    "team": [user.username for user in users]
+                }
+        
+        return None
 
     def to_dict(self):
         """Convert Lobby to a dict for storing in memory/Redis"""
@@ -122,13 +151,17 @@ class Lobby:
 
 
     def eliminate(self, user_id):
-        self.users[user_id].alive = False
-        self.eliminated.append(self.users[user_id].id)
-        self.remaining_players.remove(self.users[user_id].id)
+        user = self.users[user_id]
+        user.alive = False
+        self.eliminated.append(user.id)
+        # Remove username from remaining_players
+        # Note: active_killers property will automatically update since it's computed from remaining_players
+        if user.username in self.remaining_players:
+            self.remaining_players.remove(user.username)
 
     def new_game(self):
         for user in self.users.values(): 
-            self.remaining_players.append(user.id)
+            self.remaining_players.append(user.username)
             user.reset()
         self.game_state = 'lobby'
         self.assigned_roles = defaultdict(list)
@@ -162,112 +195,6 @@ class User:
         }
 
 
-class Vote:
-    def __init__(self, lobby: 'Lobby', voters: str):
-        self.lobby = lobby
-        self.votes = {} # key: user, value: number of votes
-        self.user_vote = {} # key: voter_id, value: user_voted 
-        self.leading_votes = [] # List of user/s with most votes
-        self.voters = voters # Killers or lobby
-        if self.voters == 'lobby':
-            self.timer = self.lobby.day_timer
-        elif self.voters == 'killers':
-            self.timer = self.lobby.night_timer
-
-    def start_voting(self):
-        # Add all active users with 0 votes
-        self.votes = {user_id: 0 for user_id in self.lobby.users.keys() if user_id in self.lobby.remaining_players}
-        self.user_vote = {}
-        self.timer.start(self)
-
-    def cast_vote(self, voter_id, target_id):
-        # Validate target is alive
-        if target_id not in self.lobby.remaining_players:
-            raise ValueError("Invalid target") # Maybe validate in redis_service.py?
-        # Killers can't vote other killers
-        if self.voters == 'killers':
-            if target_id in self.lobby.killers:
-                raise ValueError("Can't kill a killer")
-        # Remove previous vote if exists
-        if voter_id in self.user_vote:
-            prev_target = self.user_vote[voter_id]
-            self.votes[prev_target] -= 1
-
-        # Add new vote
-        self.user_vote[voter_id] = target_id
-        self.votes[target_id] += 1
-
-    # Check for majority based on total active users, for auto-submit
-    def check_majority(self):
-        if self.voters == 'lobby':
-            active_users = len(self.lobby.remaining_players)
-            majority_threshold = active_users // 2 # Round down
-        elif self.voters == 'killers':
-            active_killers = [killer for killer in self.lobby.killers if self.lobby.users[killer].alive]
-            majority_threshold = len(active_killers) // 2
-
-        for user_id, count in self.votes.items():
-            # Must be greater to avoid 2/4 and still accepts 3/5
-            if count > majority_threshold:
-                return user_id
-        # If no majority has been found, continue with vote
-        return None
-    
-    def get_leading_vote(self):
-        if not self.votes:
-            return None
-        
-        highest_vote_count = max(self.votes.values())
-
-        if highest_vote_count == 0:
-            return None
-        
-        self.leading_votes = [user_id for user_id, count in self.votes.items() if count == highest_vote_count]
-        if len(self.leading_votes) == 1: 
-            return self.leading_votes[0]
-        return None # Tie. May change to choose random on tie in future
-    
-
-class Timer:
-    def __init__(self, duration: int):
-        self.active = False
-        self.duration = duration
-        self.start_time = 0
-        self.vote = None
-
-    def _get_remaining_time(self) -> int:
-        if not self.active:
-            return 0
-        elapsed = time.time() - self.start_time
-        remaining = round(self.duration - elapsed)
-        return int(remaining)
-    
-    def _run_timer(self):
-        while self.active and self._get_remaining_time() > 0:
-            if self.vote:
-                # Check for max votes to end timer early
-                voted = self.vote.check_majority()
-                if voted:
-                    # End Voting period if lobby
-                    if self.vote.voters == 'lobby':
-                        self.active = False
-                        return voted
-            # Add functionality to check if all night actions are completed to end timer early
-            time.sleep(0.1)
-        
-        # Time completed
-        if self.active:
-            self.active = False
-            return self.vote.get_leading_vote()
-        
-    def start(self, vote: Vote = None):
-        if vote:
-            self.vote = vote
-        self.active = True
-        self.start_time = time.time()
-        self._run_timer()
-
-
 class Role(ABC):
     def __init__(self, name):
         self.name = name
@@ -277,7 +204,13 @@ class Role(ABC):
         pass
 
     @abstractmethod
-    def perform_night_action(self):
+    def perform_night_action(self, lobby: 'Lobby', user_id: Optional[str] = None, target_username: Optional[str] = None):
+        """Perform the night action. Each role validates its own parameters."""
+        pass
+    
+    @abstractmethod
+    def check_win_condition(self, lobby: 'Lobby') -> bool:
+        """Check if this role's team has won. Returns True if win condition is met."""
         pass
 
     def to_dict(self):
@@ -302,14 +235,35 @@ class SerialKiller(Role):
         dict.get(visible_roles)"""
     
     def night_action(self, lobby: 'Lobby'):
-        active_players = lobby.remaining_players
-        # vote for kill
-        voting = Vote(lobby, 'killers')
-        voting.start_voting()
-        # send list of active ids, to verify valid vote
+        # Voting is handled via functional approach in redis_service
+        pass
 
-    def perform_night_action(self, target_id: 'User.id', lobby: 'Lobby'):
-        lobby.eliminate(target_id)
+    def perform_night_action(self, lobby: 'Lobby', user_id: str, target_username: Optional[str] = None):
+        """Serial Killer must provide a target_username to vote on killing"""
+        if not target_username:
+            raise ValueError("Serial Killer must provide a target_username")
+        # Find user by username
+        target_user = None
+        for user in lobby.users.values():
+            if user.username == target_username:
+                target_user = user
+                break
+        if not target_user:
+            raise ValueError("Invalid target")
+        if target_user.username not in lobby.remaining_players:
+            raise ValueError("Target is not alive")
+        
+        # Validate killer can't vote another killer
+        if target_username in lobby.killers:
+            raise ValueError("Can't kill a killer")
+        
+        # Voting is handled in redis_service.cast_vote()
+        # This method just validates the action is allowed
+        return {"success": True, "vote_cast": target_username}
+    
+    def check_win_condition(self, lobby: 'Lobby') -> bool:
+        """Killers win if alive killers >= half of remaining players"""
+        return len(lobby.active_killers) >= len(lobby.remaining_players) / 2
 
 
 class Spy(Role):
@@ -323,6 +277,28 @@ class Spy(Role):
     def reveal(self, target: 'User'):
         return target.role.name
     
+    def perform_night_action(self, lobby: 'Lobby', target_username: Optional[str] = None):
+        """Spy must provide a target_username to investigate"""
+        if not target_username:
+            raise ValueError("Spy must provide a target_username")
+        # Find user by username
+        target_user = None
+        for user in lobby.users.values():
+            if user.username == target_username:
+                target_user = user
+                break
+        if not target_user:
+            raise ValueError("Invalid target")
+        if not target_user.alive:
+            raise ValueError("Target is not alive")
+        if not target_user.role:
+            raise ValueError("Target has no role assigned")
+        return {"success": True, "revealed_role": self.reveal(target_user)}
+    
+    def check_win_condition(self, lobby: 'Lobby') -> bool:
+        """Spies win if all killers are eliminated"""
+        return len(lobby.active_killers) == 0
+    
 class Civilian(Role):
     def __init__(self):
         super().__init__('Civilian')
@@ -331,8 +307,15 @@ class Civilian(Role):
         # send action to sleep
         pass
 
-    def perform_night_action(self):
-        return super().perform_night_action()
+    def perform_night_action(self, lobby: 'Lobby', target_username: Optional[str] = None):
+        """Civilian does nothing at night. target_username should not be provided."""
+        if target_username:
+            raise ValueError("Civilian cannot perform actions with a target")
+        return {"success": True}
+    
+    def check_win_condition(self, lobby: 'Lobby') -> bool:
+        """Civilians win if all killers are eliminated"""
+        return len(lobby.active_killers) == 0
 
 
 
