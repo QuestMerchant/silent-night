@@ -8,7 +8,6 @@ export const useUserStore = defineStore("user", () => {
     const avatar = ref(null)
     const isHost = ref(false)
     
-    
     const changeUsername = (newUsername) => {
         username.value = newUsername
     }

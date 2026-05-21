@@ -16,6 +16,8 @@ Must change the time module to asyncio and use async functions for the timer to 
 ## Frontend
 Vue
 Using Quasar framework for CSS & JS
+views are the two main routes - homeView being base url, and the baseUrl/{code} is lobbyView
+LobbyView will have 'pages' of the lobby, and then the gameplay
 
 
 #### Choices

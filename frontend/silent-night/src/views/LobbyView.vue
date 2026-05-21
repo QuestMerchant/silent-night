@@ -27,7 +27,7 @@ import { useRoute } from 'vue-router'
 import { fetchCookie } from '../util/cookies'
 import Game from '../pages/Game.vue'
 import { useUserStore } from '../stores/user'
-import { usePlayersStore } from '../stores/user'
+import { usePlayersStore } from '../stores/players'
 import { useGameStore } from '../stores/game'
 
 const user = useUserStore()
