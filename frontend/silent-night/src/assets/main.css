@@ -1,12 +1,55 @@
+@font-face {
+  font-family: 'a Theme for murder';
+  src: url('./fonts/a Theme for murder.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'October Crow';
+  src: url('./fonts/October Crow.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+body {
+  font-family: 'October Crow', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  letter-spacing: 0.15em;
+  font-size: 1.2em;
+}
+
+/* Quasar form controls */
+.q-field__native,
+.q-field__input,
+.q-field__label,
+.q-btn {
+  letter-spacing: 0.15em;
+  font-size: 1.2rem;
+}
+
+/* Quasar typography classes are on divs/spans (e.g. `text-h1`), not only h1..h6 elements. */
+.text-h1,
+.text-h2,
+.text-h3,
+.text-h4,
+.text-h5,
+.text-h6 {
+  font-family: 'a Theme for murder', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  letter-spacing: 0.03em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  text-align: center;
+  font-family: 'a Theme for murder', sans-serif;
+}
+
 #app {
   width:100%;
   margin: 0 auto;
   padding: 2rem;
   font-weight: normal;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  text-align: center;
 }
 
 @media (hover: hover) {

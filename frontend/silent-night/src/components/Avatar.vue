@@ -1,9 +1,8 @@
 <template>
   <q-card class="avatar-card" style="height: 100%">
     <q-card-section>
-      <div class="text-h6 text-center">Customize Your Avatar</div>
+      <div class="text-h2 text-center" style="margin-bottom: -20px;">Customize Your Avatar</div>
     </q-card-section>
-    <q-separator />
     <img :src=avatar alt="avatar" style="padding: 4px; max-width: 90%; margin-left: auto; margin-right: auto;" />
     <q-separator />
     <q-card-section>

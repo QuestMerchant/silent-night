@@ -1,5 +1,3 @@
-import './assets/main.css'
-
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
@@ -11,6 +9,9 @@ import '@quasar/extras/fontawesome-v6/fontawesome-v6.css'
 
 // Import Quasar css
 import 'quasar/src/css/index.sass'
+
+// App-level overrides (fonts, etc). Keep after Quasar css.
+import './assets/main.css'
 
 const pinia = createPinia()
 const app = createApp(App)
